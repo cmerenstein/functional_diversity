@@ -51,6 +51,7 @@ get_pathway_totals = function(pathways){
 pathway_bray = function(pwy, assigned, condition){
 
     print(pwy)
+    
     pathway_long = filter(assigned, PWY == pwy) %>%
                     select(taxa, sample, abundance) %>%
                     spread( sample, abundance)    
@@ -63,6 +64,8 @@ pathway_bray = function(pwy, assigned, condition){
          ncol(pathway_mat) < 10 ) { return(NA)}
     
     bray = as.matrix(vegdist( t(pathway_mat) ))
+
+    set.seed(19104)
     permanova = adonis2( bray ~ condition[rownames(bray)], permutations = 9999 )
     return( permanova[1, "Pr(>F)"] )    
         
@@ -71,8 +74,6 @@ pathway_bray = function(pwy, assigned, condition){
 
 ## takes df of pathway totals  and produces p value from wilcox test
 pathway_wilcox = function(pwy, totals, condition){
-
-    print(pwy)
 
     pathway_abundance = filter(totals, PWY == pwy) 
 
@@ -111,81 +112,9 @@ for (stud in case_control[1:5]){
 
     pathways_sig = full_join(adonis_df, wilcox_df, by = "pathway")
 
-    print( sum(adnois_df$FDR < .1))
-    print( sum(wilcox_df$FDR < .1))
+    cat("adonis: ",  sum(adonis_df$adonis_FDR < .1, na.rm = T), "\n")
+    cat("wilcox:", sum(wilcox_df$wilcox_FDR < .1, na.rm = T), "\n")
 }
-
-
-d = curatedMetagenomicData("YeZ_2018.pathabundance_relab.stool", dryrun = F)[[1]] 
-meta = pData(d)
-pathways = exprs(d)
-
-## because R gets funky sometimes, we have to make sure names are 'proper'
-rownames(meta) = make.names(rownames(meta))
-colnames(pathways) = make.names(colnames(pathways))
-
-
-pathways_df =data.frame( pathway = rownames(pathways), pathways)
-long = gather(pathways_df, "sample", "abundance", -pathway)
-
-# everything assigned to a taxa
-assigned = long[ !(grepl("UNINTEGRATED", long$pathway)) & long$pathway!= "UNMAPPED",]
-assigned = separate(assigned, pathway, c("PWY", "description"), sep = ": ") %>%
-                separate(description, c("descirption", "taxa"), sep = "\\|", fill = "right") %>%
-                filter(taxa != "unclassified" & !(is.na(taxa)))
-
-## get study condition
-condition = meta$study_condition
-names(condition) = rownames(meta)
-
-adonis_p = sapply(unique(assigned$PWY), pathway_bray, assigned = assigned, condition = condition) 
-adonis_p = adonis_p[ !(is.na(adonis_p)) ]
-adonis_df = data.frame(pathway = names(adonis_p), p = adonis_p, fdr = p.adjust(adonis_p, "BH"))
-
-
-wilcox_p = sapply(unique(totals$PWY), pathway_wilcox, totals = totals, condition = condition)
-
-
-
-totals = assigned[ is.na(assigned$taxa), ]
-
-## taxa per pathway per sample
-taxa_richness = filter(assigned, !(is.na(taxa) & taxa == "unclassified")) %>%
-                    group_by(sample, PWY) %>% summarize(n_taxa = n())
-
-## taxa per pathway across samples
-unq = unique(assigned[ !(is.na(assigned$taxa)) & assigned$taxa != "unclassified" ,c("PWY", "taxa")])
-unq_richness = group_by(unq, PWY) %>% summarize(n_taxa = n()) %>% ungroup() %>% as.data.frame()
-
-pdf("figures/taxa_per_pathway.pdf")
-
-hist(taxa_richness$n_taxa, breaks=45,  main = "taxa per pathway per sample")
-
-hist(unq_richness$n_taxa, breaks = 45, main ="taxa per pathway across all samples")
-
-dev.off()
-
-
-
-## significant differences
-all_totals = spread(totals[,c("sample", "PWY", "abundance")] , "PWY", "abundance")
-totals_mat = all_totals[,2:ncol(all_totals)]
-
-rownames(totals_mat) = gsub("\\.", "-", all_totals$sample) # fix rownames
-
-condition = meta[rownames(totals_mat), "study_condition"] # get study condition
-
-wilcox_p = apply(totals_mat, 2, function(d){
-
-        if ( (sum(d > 0) / length(d) ) < 0.1){ return(NA)}
-        else {
-            wx = wilcox.test( d ~ condition)
-            return(wx$p.value)
-        }
-
-})
-wilcox_p = wilcox_p[!(is.na(wilcox_p))]
-wilcox_df = data.frame(pathway = names(wilcox_p), p = wilcox_p, fdr = p.adjust(wilcox_p, "BH"))
 
 
 
