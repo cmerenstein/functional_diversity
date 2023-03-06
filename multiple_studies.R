@@ -15,10 +15,11 @@ case_control = sapply(studies, function(stud){
         meta = pData(d)
         condition = meta$study_condition
 
-        if ( length(unique(condition)) > 1) { return(stud)}
+        if ( length(unique(condition)) > 1 & nrow(meta) > 50) { return(stud)}
         else {return(NA)}
 })
 case_control = case_control[ !(is.na(case_control)) ]
+write.table(unname(case_control), "case_control.txt", row.names = F, col.names = F)
 
 ## %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 ## -------------- Necessary functions -------------------
@@ -86,7 +87,7 @@ significance_list = lapply( case_control[1:10], function(stud){
 
     ## first remove samples where condition is NA
     meta = meta[ !(is.na(meta$study_condition)),]
-    athways = pathways[, colnames(pathways) %in% rownames(meta)]
+    pathways = pathways[, colnames(pathways) %in% rownames(meta)]
 
     ## because R gets funky sometimes, we have to make sure names are 'proper'
     rownames(meta) = make.names(rownames(meta))
